@@ -1,7 +1,8 @@
 # 数据库表
-模型表
+模型表 rl_model
 字段
-- model_id
+- id
+- algorithm
 - target_episode
 - current_episode
 - status 0: 训练中, 1: 训练完成
@@ -13,8 +14,12 @@
 - UE_computation_capacity
 - MEC_computation_capacity
 - seed
+- learning_rate
+- batch_size
+- buffer_size
+- gamma
 
-训练数据表
+训练数据表 training_data
 字段
 - model_id
 - episode
