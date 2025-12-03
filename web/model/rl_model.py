@@ -146,5 +146,4 @@ class RLModel(models.Model):
         db_table = 'rl_model'  # 对应数据库表名
         verbose_name = '强化学习模型参数'
         verbose_name_plural = '强化学习模型参数'
-        db_comment = '强化学习模型参数表'  # Django 3.2+ 支持表注释
         ordering = ['-create_time']  # 默认按创建时间倒序
