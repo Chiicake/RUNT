@@ -1,10 +1,6 @@
-import ue
-import bs
-import ris_uav
 import gymnasium as gym
 import numpy as np
-import transmission as ts
-import myutils as utils
+from RUNT_env import ue,bs,ris_uav,transmission as ts
 
 
 class RuntSystem(gym.Env):

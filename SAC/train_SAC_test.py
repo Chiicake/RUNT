@@ -21,10 +21,10 @@ def test_model(env, model, n_eval_episodes=3, render=True):
         for i in range(1000):
             if render:
                 env.render()
-            action, _states = model.predict(obs, deterministic=True)
+            action, _states = model.predict(obs, deterministic=False)
             obs, reward, done, truncated, info = env.step(action)
             episode_reward += reward
-        #print(f"Episode reward {episode_reward:.2f}")
+        # print(f"Episode reward {episode_reward:.2f}")
         total_reward += episode_reward
     env.close()
     return total_reward/n_eval_episodes

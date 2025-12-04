@@ -1,5 +1,5 @@
 import numpy as np
-import myutils
+from RUNT_env import myutils
 
 def get_distance(position1, position2):
     '''

@@ -2,7 +2,7 @@
 RIS-UAV model
 '''
 import numpy as np
-import myutils as utils
+from RUNT_env import myutils as utils
 
 
 class Uav(object):

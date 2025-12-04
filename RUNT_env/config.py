@@ -64,10 +64,11 @@ def get_args():
 if __name__ == '__main__':
     args = get_args()
     print(''.join(['=']*80))
-    print("\t\t\t\tSystem Config")
+    print("\t\t\tSystem Config")
     print(''.join(['=']*80))
     tplt = "{:^40}\t{:^20}"
     print(tplt.format("Name", "Value"))
     for k,v in args.items():
         print(tplt.format(k,str(v)))   
     print(''.join(['=']*80))
+

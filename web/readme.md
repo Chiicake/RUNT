@@ -1,5 +1,73 @@
 # RUNT Web API 文档
 
+## 数据库配置
+
+### 配置说明
+
+项目使用MySQL数据库，配置信息如下：
+
+- **数据库类型**: MySQL
+- **主机地址**: localhost
+- **端口号**: 3306
+- **用户名**: root
+- **密码**: 2512
+- **数据库名**: runt
+
+### 数据库初始化
+
+1. 确保MySQL服务已启动
+
+2. 创建名为`runt`的数据库
+
+3. 在项目根目录执行以下命令生成迁移文件：
+
+   ```bash
+   python manage.py makemigrations
+   ```
+
+4. 执行迁移命令创建表：
+
+   ```bash
+   python manage.py migrate
+   ```
+
+### 用户管理
+
+#### 创建初始用户
+
+可以通过Django的shell创建初始用户：
+
+```bash
+python manage.py shell
+```
+
+在shell中执行以下命令：
+
+```python
+from web.models import User
+user = User(uername='admin', password='123456')
+user.save()
+```
+
+## 
+
+## 运行说明
+
+### 启动服务
+在项目根目录执行以下命令启动Django开发服务器：
+
+```bash
+D:\anaconda\envs\myrl\python.exe manage.py runserver
+```
+
+### 访问接口
+服务器启动后，接口可通过以下地址访问：
+
+```
+http://127.0.0.1:8000/login/
+http://127.0.0.1:8000/train/
+```
+
 ## 登录接口
 
 ### 接口概述
@@ -51,48 +119,6 @@ curl -X POST http://127.0.0.1:8000/login/ -d "username=admin&password=123456"
 Invoke-WebRequest -Uri http://127.0.0.1:8000/login/ -Method POST -Body @{username='admin';password='123456'}
 ```
 
-## 数据库配置
-
-### 配置说明
-项目使用MySQL数据库，配置信息如下：
-
-- **数据库类型**: MySQL
-- **主机地址**: localhost
-- **端口号**: 3306
-- **用户名**: root
-- **密码**: 2512
-- **数据库名**: runt
-
-### 数据库初始化
-
-1. 确保MySQL服务已启动
-2. 创建名为`runt`的数据库
-3. 在项目根目录执行以下命令生成迁移文件：
-   ```bash
-   python manage.py makemigrations
-   ```
-4. 执行迁移命令创建表：
-   ```bash
-   python manage.py migrate
-   ```
-
-### 用户管理
-
-#### 创建初始用户
-可以通过Django的shell创建初始用户：
-
-```bash
-python manage.py shell
-```
-
-在shell中执行以下命令：
-
-```python
-from web.models import User
-user = User(username='admin', password='123456')
-user.save()
-```
-
 ## 训练接口
 
 ### 接口概述
@@ -110,8 +136,6 @@ user.save()
 |--------|------|------|------|------------|
 | algorithm | 字符串 | 是 | 算法名称（如DQN、PPO等） | VARCHAR(100) |
 | target_episode | 整数 | 是 | 目标训练回合数 | INT UNSIGNED |
-| current_episode | 整数 | 否 | 当前训练回合数，默认0 | INT UNSIGNED |
-| status | 整数 | 否 | 训练状态：0-训练中，1-训练完成，默认0 | TINYINT |
 | task_size_average | 小数 | 否 | 任务平均大小，保留4位小数 | DECIMAL(10, 4) |
 | task_comsumption_average | 小数 | 否 | 任务平均消耗，保留4位小数 | DECIMAL(10, 4) |
 | task_time_average | 小数 | 否 | 任务平均耗时，保留4位小数 | DECIMAL(10, 4) |
@@ -163,8 +187,6 @@ user.save()
 Invoke-WebRequest -Uri http://127.0.0.1:8000/train/ -Method Post -Body @{
     algorithm='DQN';
     target_episode=1000;
-    current_episode=0;
-    status=0;
     task_size_average=10.5;
     task_comsumption_average=5.2;
     task_time_average=2.3;
@@ -177,19 +199,3 @@ Invoke-WebRequest -Uri http://127.0.0.1:8000/train/ -Method Post -Body @{
 }
 ```
 
-## 运行说明
-
-### 启动服务
-在项目根目录执行以下命令启动Django开发服务器：
-
-```bash
-D:\anaconda\envs\myrl\python.exe manage.py runserver
-```
-
-### 访问接口
-服务器启动后，接口可通过以下地址访问：
-
-```
-http://127.0.0.1:8000/login/
-http://127.0.0.1:8000/train/
-```

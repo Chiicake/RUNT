@@ -1,8 +1,10 @@
-import RUNT_System
+
 import gymnasium as gym
 import numpy as np
+from RUNT_env.RUNT_System import RuntSystem
 
-class RuntBoxEnv(RUNT_System.RuntSystem):
+
+class RuntBoxEnv(RuntSystem):
     '''A RUNT environment with box action space'''
     def __init__(self, cfg) -> None:
         super().__init__(cfg)

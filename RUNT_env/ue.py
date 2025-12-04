@@ -1,6 +1,7 @@
 import numpy as np
 import random
-import myutils
+
+from RUNT_env import myutils
 
 
 class Task(object):

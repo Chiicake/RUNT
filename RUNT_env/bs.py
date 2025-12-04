@@ -1,5 +1,5 @@
 '''BS-MEC model'''
-import myutils
+from RUNT_env import myutils
 
 
 class Mec(object):

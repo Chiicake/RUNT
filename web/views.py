@@ -2,11 +2,17 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction
+
+from RUNT_env.RUNT_Environment import RuntBoxEnv
+from SAC.make_config import get_args_with_params
+from SAC.train_SAC_test import test_model
 from .models import User
 from .model.rl_model import RLModel
+from .model.train_data import TrainData
 import os
 import decimal
-
+import threading
+import stable_baselines3 as sb3
 # Create your views here.
 
 @csrf_exempt
@@ -36,8 +42,6 @@ def train(request):
             # 获取请求参数
             algorithm = request.POST.get('algorithm')
             target_episode = request.POST.get('target_episode')
-            current_episode = request.POST.get('current_episode', '0')
-            status = request.POST.get('status', '0')
             task_size_average = request.POST.get('task_size_average')
             task_comsumption_average = request.POST.get('task_comsumption_average')
             task_time_average = request.POST.get('task_time_average')
@@ -65,19 +69,7 @@ def train(request):
             except ValueError:
                 return JsonResponse({'status': 'error', 'message': 'target_episode必须为整数'}, status=400)
             
-            try:
-                current_episode = int(current_episode)
-                if current_episode < 0:
-                    return JsonResponse({'status': 'error', 'message': 'current_episode必须为非负整数'}, status=400)
-            except ValueError:
-                return JsonResponse({'status': 'error', 'message': 'current_episode必须为整数'}, status=400)
-            
-            try:
-                status = int(status)
-                if status not in [0, 1]:
-                    return JsonResponse({'status': 'error', 'message': 'status必须为0或1'}, status=400)
-            except ValueError:
-                return JsonResponse({'status': 'error', 'message': 'status必须为整数'}, status=400)
+
             
             # 处理Decimal类型参数
             def parse_decimal(value, max_digits, decimal_places):
@@ -132,8 +124,8 @@ def train(request):
                 rl_model = RLModel(
                     algorithm=algorithm,
                     target_episode=target_episode,
-                    current_episode=current_episode,
-                    status=status,
+                    current_episode=0,
+                    status=0,
                     task_size_average=task_size_average,
                     task_comsumption_average=task_comsumption_average,
                     task_time_average=task_time_average,
@@ -149,22 +141,98 @@ def train(request):
                 
                 # 保存到数据库，获取自增id
                 rl_model.save()
-                
-                # 创建以id命名的txt文件
-                models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'model')
-                file_path = os.path.join(models_dir, f'{rl_model.id}.txt')
-                
+
+            # 异步训练
+            def async_train(model_id, algo, target_ep, task_size_avg, task_cons_avg, task_time_avg, task_arr_rate, 
+                          n_ue, ue_comp_cap, mec_comp_cap, seed_val, lr, batch_sz, gamma_val):
                 try:
-                    with open(file_path, 'w') as f:
-                        f.write(f'RL Model ID: {rl_model.id}\n')
-                        f.write(f'Algorithm: {rl_model.algorithm}\n')
-                        f.write(f'Target Episode: {rl_model.target_episode}\n')
-                        f.write(f'Current Episode: {rl_model.current_episode}\n')
-                        f.write(f'Status: {rl_model.status}\n')
-                        f.write(f'Create Time: {rl_model.create_time}\n')
+                    # 创建一个日志文件
+                    log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), f'../models/train_log/train_log_{model_id}.txt')
+                    # 写入开始信息
+                    with open(log_file, 'w') as f:
+                        f.write(f'训练开始，model_id: {model_id}\n')
+                        f.write(f'algorithm: {algo}\n')
+                        f.write(f'target_episode: {target_ep}\n')
+
+                    target_ep = int(target_ep)
+                    n_ue = int(n_ue) if n_ue is not None else None
+                    seed_val = int(seed_val) if seed_val is not None else None
+                    batch_sz = int(batch_sz) if batch_sz is not None else None
+                    cfg = get_args_with_params(
+                        task_size_average=float(task_size_avg) if task_size_avg is not None else None,
+                        task_comsumption_average=float(task_cons_avg) if task_cons_avg is not None else None,
+                        task_time_average=float(task_time_avg) if task_time_avg is not None else None,
+                        task_arrival_rate=float(task_arr_rate) if task_arr_rate is not None else None,
+                        n_UE=n_ue,
+                        UE_computation_capacity=float(ue_comp_cap) if ue_comp_cap is not None else None,
+                        MEC_computation_capacity=float(mec_comp_cap) if mec_comp_cap is not None else None,
+                        seed=seed_val
+                    )
+                    
+                    # 写入配置信息
+                    with open(log_file, 'a') as f:
+                        f.write("\n配置信息:\n")
+                        for key, value in cfg.items():
+                            f.write(f'{key}: {value}\n')
+                    
+                    # 简化测试，只验证函数被调用，不执行完整训练
+                    env = RuntBoxEnv(cfg)
+                    with open(log_file, 'a') as f:
+                        f.write("\n环境创建成功\n")
+                    model = sb3.SAC('MlpPolicy', env, verbose=1)
+                    rewards = []
+                    ma_rewards = []
+                    for i in range(target_episode):
+                        model.learn(total_timesteps=target_episode)
+                        ep_reward = test_model(env, model, n_eval_episodes=10, render=True)
+                        rewards.append(ep_reward)
+                        ma_rewards.append((ma_rewards[-1] * 0.95 + ep_reward * 0.05) if ma_rewards else ep_reward)
+                        train_data = TrainData(
+                            model_id=model_id,
+                            episode=i+1,
+                            reward=ep_reward,
+                            smoothed_reward=ma_rewards[-1]
+                        )
+                        train_data.save()
+                    models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../models')
+                    file_path = os.path.join(models_dir, f'{rl_model.id}')
+                    model.save(file_path)
+                    
+
+                    
                 except Exception as e:
-                    # 文件创建失败，事务会自动回滚
-                    return JsonResponse({'status': 'error', 'message': f'文件创建失败: {str(e)}'}, status=500)
+                    # 记录详细错误信息到文件
+                    import traceback
+                    log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), f'../models/train_error/train_error_{model_id}.txt')
+                    with open(log_file, 'w') as f:
+                        f.write(f"异步训练失败: {str(e)}\n")
+                        f.write(f"错误堆栈: {traceback.format_exc()}\n")
+                    # 同时打印到控制台
+                    print(f"异步训练失败: {str(e)}")
+                    print(f"错误堆栈: {traceback.format_exc()}")
+
+            # 启动异步线程执行训练操作，将所有需要的参数作为函数参数传递
+            thread = threading.Thread(
+                target=async_train,
+                args=(
+                    rl_model.id,
+                    algorithm,
+                    target_episode,
+                    task_size_average,
+                    task_comsumption_average,
+                    task_time_average,
+                    task_arrival_rate,
+                    n_UE,
+                    UE_computation_capacity,
+                    MEC_computation_capacity,
+                    seed,
+                    learning_rate,
+                    batch_size,
+                    gamma
+                )
+            )
+            thread.daemon = True  # 设置为守护线程，主线程结束时自动退出
+            thread.start()
             
             # 返回成功响应
             return JsonResponse({

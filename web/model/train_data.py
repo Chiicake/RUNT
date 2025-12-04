@@ -1,9 +1,19 @@
 from django.db import models
+from .rl_model import RLModel
+
 class TrainData(models.Model):
     id = models.BigAutoField(
         primary_key=True,
         verbose_name='主键ID',
         help_text='主键ID，自增'
+    )
+
+    model = models.ForeignKey(
+        RLModel,
+        on_delete=models.CASCADE,
+        verbose_name='关联模型',
+        help_text='关联的RL模型',
+        null=False
     )
 
     episode = models.PositiveIntegerField(
@@ -45,7 +55,6 @@ class TrainData(models.Model):
         db_table = 'train_data'  # 对应数据库表名
         verbose_name = '训练数据'
         verbose_name_plural = '训练数据'
-        db_comment = '强化学习训练数据表'  # Django 3.2+ 支持
         # 索引：提升模型ID查询效率
         indexes = [
             models.Index(
