@@ -5,6 +5,7 @@ from django.db import transaction
 
 from RUNT_env.RUNT_Environment import RuntBoxEnv
 from RUNT_env.config import get_args
+from SAC.train_SAC_test import test_model
 from SAC.make_config import get_args_with_params
 from .models import User
 from .model.rl_model import RLModel

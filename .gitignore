@@ -1,3 +1,5 @@
 models
 .idea
 .trae
+.venv
+logs
