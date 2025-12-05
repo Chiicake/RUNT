@@ -7,26 +7,29 @@ from utils.visualization import plot_rewards
 
 def train_SAC(env, model, total_timesteps, verbose=1):
     '''Train SAC model.'''
-    model = sb3.SAC('MlpPolicy', env, verbose=verbose)
-    model.learn(total_timesteps=total_timesteps)
+    if model is None:
+        model = sb3.SAC('MlpPolicy', env, verbose=verbose)
+    model = model.learn(total_timesteps=total_timesteps)
     return model
 
 def test_model(env, model, n_eval_episodes=3, render=True):
     '''Test the model.'''
-    obs, info = env.reset()
     total_reward = 0.0
     for i in range(n_eval_episodes):
         done = False
         episode_reward = 0.0
-        for i in range(1000):
+        # 每次测试前重置环境
+        obs, info = env.reset()
+        for i in range(10000):
             if render:
                 env.render()
             action, _states = model.predict(obs, deterministic=False)
             obs, reward, done, truncated, info = env.step(action)
             episode_reward += reward
+            if done or truncated:
+                break
         # print(f"Episode reward {episode_reward:.2f}")
         total_reward += episode_reward
-    env.close()
     return total_reward/n_eval_episodes
 
 def model_train_and_test(env, model, n_episode, episode_timesteps=1000):
