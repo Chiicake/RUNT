@@ -217,8 +217,10 @@ D:\anaconda\envs\myrl\python.exe manage.py runserver
 ```
 http://127.0.0.1:8000/login/
 http://127.0.0.1:8000/train/
+http://127.0.0.1:8000/stop-train/
 http://127.0.0.1:8000/models/
 http://127.0.0.1:8000/models/<model_id>/train-data/
+http://127.0.0.1:8000/testmodel/
 ```
 
 ## 登录接口
@@ -404,6 +406,176 @@ curl -X POST http://127.0.0.1:8000/testmodel/ -H "Content-Type: application/json
 Invoke-WebRequest -Uri http://127.0.0.1:8000/testmodel/ -Method POST -ContentType "application/json" -Body '{"model_id": "123", "observation": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]}'
 ```
 
+## 停止训练接口
+
+### 接口概述
+用于停止强化学习模型训练的HTTP接口，更新数据库中模型的训练状态为完成。
+
+### 接口详情
+
+#### 请求信息
+- **URL**: `/stop-train/`
+- **方法**: `POST`
+- **内容类型**: `application/json`
+
+#### 请求参数
+| 参数名 | 类型 | 必须 | 描述 |
+|--------|------|------|------|
+| model_id | 整数 | 是 | 模型ID |
+
+#### 响应信息
+- **内容类型**: `application/json`
+
+#### 响应示例
+
+##### 成功响应
+```json
+{
+  "status": "success",
+  "message": "训练已停止"
+}
+```
+
+##### 失败响应
+
+###### 参数验证失败
+```json
+{
+  "status": "error",
+  "message": "model_id不能为空"
+}
+```
+
+###### 模型不存在
+```json
+{
+  "status": "error",
+  "message": "模型ID 999 不存在"
+}
+```
+
+### 使用示例
+
+#### curl命令示例
+```bash
+curl -X POST http://127.0.0.1:8000/stop-train/ -H "Content-Type: application/json" -d '{"model_id": 1}'
+```
+
+#### PowerShell命令示例
+```powershell
+Invoke-WebRequest -Uri http://127.0.0.1:8000/stop-train/ -Method POST -ContentType "application/json" -Body '{"model_id": 1}'
+```
+
+## 训练助手接口
+
+### 接口概述
+用于根据训练超参数和奖励值数组提供专业训练指导的HTTP接口，采用流式响应方式返回训练建议。
+
+### 接口详情
+
+#### 请求信息
+- **URL**: `/trainingassistent/`
+- **方法**: `POST`
+- **内容类型**: `application/json`
+
+#### 请求参数
+| 参数名 | 类型 | 必须 | 描述 |
+|--------|------|------|------|
+| hyperparameters | 对象 | 是 | 训练算法超参数配置 |
+| rewards | 数组 | 是 | 奖励值数组，包含每个训练回合的奖励值 |
+
+##### hyperparameters对象结构
+| 字段名 | 类型 | 描述 |
+|--------|------|------|
+| algorithm | 字符串 | 训练算法 |
+| target_episode | 整数 | 目标训练回合数 |
+| task_size_average | 小数 | 任务大小平均值 |
+| task_comsumption_average | 小数 | 任务消耗平均值 |
+| task_time_average | 小数 | 任务时间平均值 |
+| task_arrival_rate | 小数 | 任务到达率 |
+| n_UE | 整数 | UE数量 |
+| UE_computation_capacity | 小数 | UE计算能力 |
+| MEC_computation_capacity | 小数 | MEC计算能力 |
+| seed | 整数 | 随机种子 |
+| learning_rate | 小数 | 学习率 |
+| batch_size | 整数 | 批次大小 |
+| buffer_size | 整数 | 经验回放缓冲区大小 |
+| gamma | 小数 | 折扣因子 |
+| tau | 小数 | 软更新系数 |
+| learning_starts | 整数 | 学习开始步数 |
+
+#### 响应信息
+- **内容类型**: `text/plain`
+- **响应方式**: 流式响应
+
+#### 响应示例
+
+##### 成功响应（流式返回）
+```
+## 1. 超参数配置分析
+- 学习率设置为0.001，对于当前任务来说可能偏高，建议调整到0.0001-0.0005之间
+- 批次大小32较小，建议增加到64-128，以提高训练稳定性
+- 经验回放缓冲区大小1000000设置合理，能够存储足够的经验数据
+
+## 2. 奖励曲线分析
+- 奖励曲线呈现上升趋势，但波动较大，说明训练不稳定
+- 第50-100回合奖励增长较快，第100回合后增长放缓，可能进入平台期
+- 整体奖励值较低，还有较大的提升空间
+
+## 3. 训练改进建议
+### 超参数调整建议
+- 学习率：降低到0.0003，采用学习率衰减策略
+- 批次大小：增加到128
+- 折扣因子：保持0.99不变，或调整到0.995
+
+### 训练策略优化
+- 实现探索策略衰减，随着训练进行减少探索率
+- 增加经验回放的优先级机制，优先学习重要的经验
+
+### 模型架构改进
+- 考虑增加网络层数或每层神经元数量
+- 尝试使用不同的激活函数，如ReLU6或LeakyReLU
+
+## 4. 实施步骤建议
+1. 首先调整学习率和批次大小，观察训练稳定性变化
+2. 然后添加学习率衰减策略，观察奖励曲线的收敛情况
+3. 最后考虑模型架构改进，进一步提高模型性能
+
+预期效果：训练稳定性提高，奖励曲线波动减小，最终奖励值提升10%-20%
+```
+
+##### 失败响应
+```json
+{
+  "status": "error",
+  "message": "hyperparameters必须是有效的JSON对象"
+}
+```
+
+### 使用示例
+
+#### curl命令示例
+```bash
+curl -X POST http://127.0.0.1:8000/trainingassistent/ -H "Content-Type: application/json" -d '{
+  "hyperparameters": {
+    "algorithm": "SAC",
+    "target_episode": 1000,
+    "learning_rate": 0.001,
+    "batch_size": 32,
+    "buffer_size": 1000000,
+    "gamma": 0.99,
+    "tau": 0.005,
+    "learning_starts": 1000
+  },
+  "rewards": [-100, -95, -90, -85, -80, -75, -70, -65, -60, -55]
+}'
+```
+
+#### PowerShell命令示例
+```powershell
+Invoke-WebRequest -Uri http://127.0.0.1:8000/trainingassistent/ -Method POST -ContentType "application/json" -Body '{"hyperparameters": {"algorithm": "SAC", "target_episode": 1000, "learning_rate": 0.001, "batch_size": 32, "buffer_size": 1000000, "gamma": 0.99, "tau": 0.005, "learning_starts": 1000}, "rewards": [-100, -95, -90, -85, -80, -75, -70, -65, -60, -55]}'
+```
+
 ## 接口列表
 
 ### 所有可用接口
@@ -411,7 +583,9 @@ Invoke-WebRequest -Uri http://127.0.0.1:8000/testmodel/ -Method POST -ContentTyp
 |----------|------|------|
 | `/login/` | POST | 用户登录验证 |
 | `/train/` | POST | 创建强化学习模型训练任务 |
+| `/stop-train/` | POST | 停止强化学习模型训练 |
 | `/models/` | GET | 查询模型列表，支持分页 |
 | `/models/<model_id>/train-data/` | GET | 查询特定模型的训练数据，支持分页 |
 | `/testmodel/` | POST | 使用预训练模型执行推理 |
+| `/trainingassistent/` | POST | 根据训练超参数和奖励值提供专业训练指导 |
 

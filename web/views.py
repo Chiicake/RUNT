@@ -1,5 +1,5 @@
 from django.shortcuts import render
-from django.http import JsonResponse
+from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction
 
@@ -10,10 +10,14 @@ from SAC.make_config import get_args_with_params
 from .models import User
 from .model.rl_model import RLModel
 from .model.train_data import TrainData
+from .config import config
+from .prompt_template import generate_prompt
 import os
 import decimal
 import threading
 import stable_baselines3 as sb3
+import json
+from openai import OpenAI
 # Create your views here.
 
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
@@ -400,11 +404,21 @@ def train(request):
                             smoothed_reward=ma_rewards[-1]
                         )
                         train_data.save()
+                        
+                        # 更新当前回合数
+                        rl_model = RLModel.objects.get(id=model_id)
+                        rl_model.current_episode = i+1
+                        rl_model.save()
                     
                     # 保存模型
                     models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../models')
                     file_path = os.path.join(models_dir, f'{model_id}')
                     model.save(file_path)
+                    
+                    # 更新训练状态为完成
+                    rl_model = RLModel.objects.get(id=model_id)
+                    rl_model.status = RLModel.STATUS_COMPLETED
+                    rl_model.save()
                     
                     # 写入训练完成信息
                     with open(log_file, 'a') as f:
@@ -460,6 +474,34 @@ def train(request):
         return JsonResponse({'status': 'error', 'message': '仅支持POST请求'}, status=405)
 
 @csrf_exempt
+def stop_train(request):
+    """
+    停止训练接口
+    更新数据库中的训练状态为完成
+    """
+    if request.method == 'POST':
+        try:
+            import json
+            request_data = json.loads(request.body)
+            model_id = request_data.get('model_id')
+            
+            if not model_id:
+                return JsonResponse({'status': 'error', 'message': 'model_id不能为空'}, status=400)
+            
+            # 更新模型状态为训练完成
+            rl_model = RLModel.objects.get(id=model_id)
+            rl_model.status = RLModel.STATUS_COMPLETED
+            rl_model.save()
+            
+            return JsonResponse({'status': 'success', 'message': '训练已停止'}, status=200)
+        except RLModel.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': f'模型ID {model_id} 不存在'}, status=404)
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': f'服务器内部错误: {str(e)}'}, status=500)
+    else:
+        return JsonResponse({'status': 'error', 'message': '仅支持POST请求'}, status=405)
+
+@csrf_exempt
 def testmodel(request):
     """
     模型推理接口
@@ -475,8 +517,8 @@ def testmodel(request):
             # 1. 输入验证
             # 验证model_id
             model_id = request_data.get('model_id')
-            if not model_id or not isinstance(model_id, str) or model_id.strip() == '':
-                return JsonResponse({'status': 'error', 'message': 'model_id必须是非空字符串'}, status=400)
+            if not model_id:
+                return JsonResponse({'status': 'error', 'message': 'model_id为空'}, status=400)
             
             # 验证observation
             observation = request_data.get('observation')
@@ -529,7 +571,7 @@ def testmodel(request):
             # 加载预训练模型
             try:
                 model = sb3.SAC("MlpPolicy", env, verbose=1, learning_rate=0.00003, tensorboard_log='./SAC/')
-                model.load('models/'+model_id+'.zip')
+                model.load('models/'+model_id)
             except Exception as e:
                 return JsonResponse({'status': 'error', 'message': f'模型加载失败: {str(e)}'}, status=500)
             
@@ -546,7 +588,7 @@ def testmodel(request):
                 action, _ = model.predict(obs, deterministic=True)
                 
                 # 执行环境步骤
-                next_obs, reward, done, _ = env.step(action)
+                next_obs, reward, done,_ , _ = env.step(action)
                 
                 # 转换为适当的float类型
                 action = [float(x) for x in action]
@@ -569,6 +611,74 @@ def testmodel(request):
             }
             
             return JsonResponse(response_data, status=200)
+        
+        except json.JSONDecodeError:
+            return JsonResponse({'status': 'error', 'message': '无效的JSON格式'}, status=400)
+        except Exception as e:
+            # 捕获所有其他异常
+            return JsonResponse({'status': 'error', 'message': f'服务器内部错误: {str(e)}'}, status=500)
+    else:
+        return JsonResponse({'status': 'error', 'message': '仅支持POST请求'}, status=405)
+
+@csrf_exempt
+def trainingassistent(request):
+    """
+    训练助手API接口
+    接收训练超参数和奖励值数组，返回流式训练指导建议
+    """
+    if request.method == 'POST':
+        try:
+            # 解析JSON请求体
+            request_data = json.loads(request.body)
+            
+            # 1. 输入验证
+            # 验证超参数配置
+            hyperparameters = request_data.get('hyperparameters')
+            if not hyperparameters or not isinstance(hyperparameters, dict):
+                return JsonResponse({'status': 'error', 'message': 'hyperparameters必须是有效的JSON对象'}, status=400)
+            
+            # 验证奖励值数组
+            rewards = request_data.get('rewards')
+            if not rewards or not isinstance(rewards, list):
+                return JsonResponse({'status': 'error', 'message': 'rewards必须是有效的浮点数数组'}, status=400)
+            
+            # 验证奖励值数组中的元素是否为数值
+            try:
+                rewards = [float(r) for r in rewards]
+            except (ValueError, TypeError):
+                return JsonResponse({'status': 'error', 'message': 'rewards数组中的元素必须是有效的数值'}, status=400)
+            
+            # 2. 生成Prompt
+            prompt = generate_prompt(hyperparameters, rewards)
+            
+            # 3. 初始化DeepSeek客户端
+            client = OpenAI(
+                api_key=config.DEEPSEEK_API_KEY,
+                base_url=config.DEEPSEEK_API_BASE
+            )
+            
+            # 4. 定义流式响应生成器函数
+            def generate():
+                try:
+                    # 调用DeepSeek API，启用流式响应
+                    response = client.chat.completions.create(
+                        model=config.DEEPSEEK_MODEL_NAME,
+                        messages=[
+                            {"role": "system", "content": prompt}
+                        ],
+                        stream=True
+                    )
+                    
+                    # 流式返回响应内容
+                    for chunk in response:
+                        if chunk.choices[0].delta.content:
+                            yield chunk.choices[0].delta.content
+                except Exception as e:
+                    # 发生错误时，返回详细的错误信息，帮助调试
+                    yield f"\n\n## 错误信息\n- 错误类型: {type(e).__name__}\n- 错误详情: {str(e)}\n- API密钥: {config.DEEPSEEK_API_KEY[:5]}...{config.DEEPSEEK_API_KEY[-5:]} (部分隐藏)\n- API端点: {config.DEEPSEEK_API_BASE}\n- 模型名称: {config.DEEPSEEK_MODEL_NAME}\n- 请检查配置文件中的API密钥和端点设置是否正确\n- 或联系管理员获取帮助"
+            
+            # 5. 返回流式响应
+            return StreamingHttpResponse(generate(), content_type='text/plain')
         
         except json.JSONDecodeError:
             return JsonResponse({'status': 'error', 'message': '无效的JSON格式'}, status=400)

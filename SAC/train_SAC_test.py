@@ -20,7 +20,7 @@ def test_model(env, model, n_eval_episodes=3, render=True):
         episode_reward = 0.0
         # 每次测试前重置环境
         obs, info = env.reset()
-        for i in range(10000):
+        for i in range(1000):
             if render:
                 env.render()
             action, _states = model.predict(obs, deterministic=False)

@@ -186,3 +186,152 @@ class ModelAPITestCase(TestCase):
         data = json.loads(response.content)
         self.assertEqual(response.status_code, 405)
         self.assertEqual(data['status'], 'error')
+
+
+class TrainingAssistantAPITestCase(TestCase):
+    """
+    测试训练助手API接口
+    """
+    
+    def setUp(self):
+        """
+        测试前的准备工作
+        """
+        self.client = Client()
+    
+    def test_trainingassistant_post_valid_data(self):
+        """
+        测试使用有效数据调用训练助手接口
+        """
+        url = reverse('trainingassistent')
+        
+        # 准备测试数据
+        valid_data = {
+            "hyperparameters": {
+                "algorithm": "SAC",
+                "target_episode": 1000,
+                "learning_rate": 0.001,
+                "batch_size": 32,
+                "buffer_size": 1000000,
+                "gamma": 0.99,
+                "tau": 0.005,
+                "learning_starts": 1000
+            },
+            "rewards": [-100, -95, -90, -85, -80, -75, -70, -65, -60, -55]
+        }
+        
+        # 发送POST请求
+        response = self.client.post(url, json.dumps(valid_data), content_type='application/json')
+        
+        # 验证响应状态码
+        self.assertEqual(response.status_code, 200)
+        
+        # 验证响应内容类型
+        self.assertEqual(response['Content-Type'], 'text/plain')
+    
+    def test_trainingassistant_post_invalid_hyperparameters(self):
+        """
+        测试使用无效超参数调用训练助手接口
+        """
+        url = reverse('trainingassistent')
+        
+        # 准备无效测试数据：hyperparameters不是对象
+        invalid_data = {
+            "hyperparameters": "invalid_type",
+            "rewards": [-100, -95, -90, -85, -80]
+        }
+        
+        # 发送POST请求
+        response = self.client.post(url, json.dumps(invalid_data), content_type='application/json')
+        
+        # 验证响应状态码
+        self.assertEqual(response.status_code, 400)
+        
+        # 验证响应内容
+        data = json.loads(response.content)
+        self.assertEqual(data['status'], 'error')
+        self.assertIn('hyperparameters', data['message'])
+    
+    def test_trainingassistant_post_invalid_rewards(self):
+        """
+        测试使用无效奖励值数组调用训练助手接口
+        """
+        url = reverse('trainingassistent')
+        
+        # 准备无效测试数据：rewards不是数组
+        invalid_data = {
+            "hyperparameters": {
+                "algorithm": "SAC",
+                "target_episode": 1000
+            },
+            "rewards": "invalid_type"
+        }
+        
+        # 发送POST请求
+        response = self.client.post(url, json.dumps(invalid_data), content_type='application/json')
+        
+        # 验证响应状态码
+        self.assertEqual(response.status_code, 400)
+        
+        # 验证响应内容
+        data = json.loads(response.content)
+        self.assertEqual(data['status'], 'error')
+        self.assertIn('rewards', data['message'])
+    
+    def test_trainingassistant_post_invalid_reward_values(self):
+        """
+        测试使用包含无效值的奖励数组调用训练助手接口
+        """
+        url = reverse('trainingassistent')
+        
+        # 准备无效测试数据：rewards数组包含非数值类型
+        invalid_data = {
+            "hyperparameters": {
+                "algorithm": "SAC",
+                "target_episode": 1000
+            },
+            "rewards": [-100, -95, "invalid_value", -85, -80]
+        }
+        
+        # 发送POST请求
+        response = self.client.post(url, json.dumps(invalid_data), content_type='application/json')
+        
+        # 验证响应状态码
+        self.assertEqual(response.status_code, 400)
+        
+        # 验证响应内容
+        data = json.loads(response.content)
+        self.assertEqual(data['status'], 'error')
+        self.assertIn('rewards', data['message'])
+    
+    def test_trainingassistant_get_method_not_allowed(self):
+        """
+        测试训练助手接口不允许GET方法
+        """
+        url = reverse('trainingassistent')
+        
+        # 发送GET请求
+        response = self.client.get(url)
+        
+        # 验证响应状态码
+        self.assertEqual(response.status_code, 405)
+        
+        # 验证响应内容
+        data = json.loads(response.content)
+        self.assertEqual(data['status'], 'error')
+    
+    def test_trainingassistant_post_empty_data(self):
+        """
+        测试使用空数据调用训练助手接口
+        """
+        url = reverse('trainingassistent')
+        
+        # 发送空数据POST请求
+        response = self.client.post(url, json.dumps({}), content_type='application/json')
+        
+        # 验证响应状态码
+        self.assertEqual(response.status_code, 400)
+        
+        # 验证响应内容
+        data = json.loads(response.content)
+        self.assertEqual(data['status'], 'error')
