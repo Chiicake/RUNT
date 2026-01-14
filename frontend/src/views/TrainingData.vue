@@ -214,6 +214,210 @@ const chartColors = {
 // 图表实例
 let rewardChartInstance = null
 
+// 初始化图表
+const initRewardChart = () => {
+  // 获取canvas元素
+  const ctx = document.getElementById('rewardChart')
+  if (ctx) {
+    // 如果已有实例，先销毁
+    if (rewardChartInstance) {
+      rewardChartInstance.destroy()
+    }
+    // 注册Chart.js组件（确保只注册一次）
+    if (!Chart.getChart(ctx)) {
+      rewardChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: '奖励',
+              data: [],
+              borderColor: chartColors.reward,
+              backgroundColor: `${chartColors.reward}20`,
+              borderWidth: 2,
+              fill: true,
+              tension: isSmooth.value ? 0.4 : 0,
+              pointBackgroundColor: chartColors.reward,
+              pointBorderColor: '#fff',
+              pointBorderWidth: 2,
+              pointRadius: 4,
+              pointHoverRadius: 6
+            },
+            {
+              label: '平滑奖励',
+              data: [],
+              borderColor: chartColors.smoothedReward,
+              backgroundColor: `${chartColors.smoothedReward}20`,
+              borderWidth: 2,
+              fill: true,
+              tension: isSmooth.value ? 0.4 : 0,
+              pointBackgroundColor: chartColors.smoothedReward,
+              pointBorderColor: '#fff',
+              pointBorderWidth: 2,
+              pointRadius: 4,
+              pointHoverRadius: 6
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            title: {
+              display: true,
+              text: `模型${modelId.value}训练奖励趋势`,
+              font: {
+                size: 16,
+                weight: 'bold'
+              },
+              color: '#333'
+            },
+            legend: {
+              display: true,
+              position: 'bottom',
+              labels: {
+                font: {
+                  size: 12
+                },
+                color: '#666'
+              }
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              backgroundColor: 'rgba(255, 255, 255, 0.95)',
+              titleColor: '#333',
+              bodyColor: '#666',
+              borderColor: '#ddd',
+              borderWidth: 1,
+              padding: 12,
+              cornerRadius: 6,
+              callbacks: {
+                title: function(context) {
+                  return `回合: ${context[0].label}`;
+                },
+                label: function(context) {
+                  return `${context.dataset.label}: ${context.parsed.y.toFixed(6)}`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: {
+                color: '#f0f0f0',
+                drawBorder: false
+              },
+              ticks: {
+                color: '#666',
+                font: {
+                  size: 11
+                },
+                maxRotation: 45,
+                minRotation: 45
+              }
+            },
+            y: {
+              title: {
+                display: true,
+                text: '奖励值',
+                color: '#666',
+                font: {
+                  size: 14
+                }
+              },
+              grid: {
+                color: '#f0f0f0',
+                drawBorder: false
+              },
+              ticks: {
+                color: '#666',
+                font: {
+                  size: 11
+                },
+                // 使用科学计数法显示大数值
+                callback: function(value) {
+                  // 如果数值绝对值大于1000或小于0.001，使用科学计数法
+                  if (Math.abs(value) >= 1000 || Math.abs(value) < 0.001) {
+                    return value.toExponential(2);
+                  }
+                  // 否则使用普通格式，保留2位小数
+                  return value.toFixed(2);
+                },
+                // 设置最大刻度数
+                maxTicksLimit: 8,
+                // 使用Chart.js内置的自动刻度算法
+                autoSkip: true,
+                autoSkipPadding: 10
+              }
+            }
+          },
+          interaction: {
+            mode: 'nearest',
+            axis: 'x',
+            intersect: false
+          },
+          animation: {
+            duration: 1000,
+            easing: 'easeInOutQuart'
+          }
+        }
+      })
+    }
+  }
+}
+
+// 更新图表
+const updateRewardChart = () => {
+  if (!rewardChartInstance) {
+    initRewardChart()
+    return
+  }
+  
+  // 准备数据
+  const labels = trainData.value.map(item => item.episode)
+  const rewardData = trainData.value.map(item => item.reward)
+  const smoothedRewardData = trainData.value.map(item => item.smoothed_reward)
+  
+  // 计算Y轴范围
+  let minValue = Infinity
+  let maxValue = -Infinity
+  
+  if (trainData.value.length > 0) {
+    // 获取所有奖励值
+    const allRewards = [...rewardData, ...smoothedRewardData]
+    minValue = Math.min(...allRewards)
+    maxValue = Math.max(...allRewards)
+    
+    // 确保Y轴有合理的范围
+    const range = maxValue - minValue
+    if (range === 0) {
+      minValue -= 1
+      maxValue += 1
+    } else {
+      // 添加10%的边距
+      const margin = range * 0.1
+      minValue -= margin
+      maxValue += margin
+    }
+  } else {
+    // 如果没有数据，设置默认范围
+    minValue = 0
+    maxValue = 100
+  }
+  
+  // 更新图表数据和选项
+  rewardChartInstance.data.labels = labels
+  rewardChartInstance.data.datasets[0].data = rewardData
+  rewardChartInstance.data.datasets[1].data = smoothedRewardData
+  rewardChartInstance.options.scales.y.min = minValue
+  rewardChartInstance.options.scales.y.max = maxValue
+  
+  // 更新图表
+  rewardChartInstance.update()
+}
+
 // 获取模型信息
 const fetchModelInfo = async () => {
   try {
@@ -282,7 +486,7 @@ const fetchTrainData = async () => {
       totalPages.value = data.total_pages
       
       // 更新图表
-      updateChart()
+      updateRewardChart()
     } else {
       errorMessage.value = response.data.message || '获取训练数据失败'
     }
@@ -398,187 +602,6 @@ const changePage = (page) => {
   }
 }
 
-// 创建或更新图表
-const updateChart = () => {
-  // 获取canvas元素
-  const ctx = document.getElementById('rewardChart')
-  if (!ctx) {
-    console.error('Canvas element not found')
-    return
-  }
-  
-  // 销毁现有图表实例
-  if (rewardChartInstance) {
-    rewardChartInstance.destroy()
-  }
-  
-  // 准备数据
-  const labels = trainData.value.map(item => item.episode)
-  const rewardData = trainData.value.map(item => item.reward)
-  const smoothedRewardData = trainData.value.map(item => item.smoothed_reward)
-  
-  // 计算Y轴范围
-  let minValue = Infinity
-  let maxValue = -Infinity
-  
-  if (trainData.value.length > 0) {
-    // 获取所有奖励值
-    const allRewards = [...rewardData, ...smoothedRewardData]
-    minValue = Math.min(...allRewards)
-    maxValue = Math.max(...allRewards)
-  }
-  
-  // 计算Y轴上下限
-  const yMin = minValue - 1000
-  const yMax = maxValue + 1000
-  
-  // 创建新的图表实例
-  rewardChartInstance = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [
-        {
-          label: '奖励',
-          data: rewardData,
-          borderColor: chartColors.reward,
-          backgroundColor: `${chartColors.reward}20`,
-          borderWidth: 2,
-          fill: true,
-          tension: isSmooth.value ? 0.4 : 0,
-          pointBackgroundColor: chartColors.reward,
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2,
-          pointRadius: 4,
-          pointHoverRadius: 6
-        },
-        {
-          label: '平滑奖励',
-          data: smoothedRewardData,
-          borderColor: chartColors.smoothedReward,
-          backgroundColor: `${chartColors.smoothedReward}20`,
-          borderWidth: 2,
-          fill: true,
-          tension: isSmooth.value ? 0.4 : 0,
-          pointBackgroundColor: chartColors.smoothedReward,
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2,
-          pointRadius: 4,
-          pointHoverRadius: 6
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        title: {
-          display: true,
-          text: `模型${modelId.value}训练奖励趋势`,
-          font: {
-            size: 16,
-            weight: 'bold'
-          },
-          color: '#333'
-        },
-        legend: {
-          display: true,
-          position: 'bottom',
-          labels: {
-            font: {
-              size: 12
-            },
-            color: '#666'
-          }
-        },
-        tooltip: {
-          mode: 'index',
-          intersect: false,
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
-          titleColor: '#333',
-          bodyColor: '#666',
-          borderColor: '#ddd',
-          borderWidth: 1,
-          padding: 12,
-          cornerRadius: 6,
-          callbacks: {
-            title: function(context) {
-              return `回合: ${context[0].label}`;
-            },
-            label: function(context) {
-              return `${context.dataset.label}: ${context.parsed.y.toFixed(6)}`;
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: {
-            color: '#f0f0f0',
-            drawBorder: false
-          },
-          ticks: {
-            color: '#666',
-            font: {
-              size: 11
-            },
-            maxRotation: 45,
-            minRotation: 45
-          }
-        },
-        y: {
-          title: {
-            display: true,
-            text: '奖励值',
-            color: '#666',
-            font: {
-              size: 14
-            }
-          },
-          grid: {
-            color: '#f0f0f0',
-            drawBorder: false
-          },
-          // 动态调整坐标轴范围
-          min: yMin,
-          max: yMax,
-          ticks: {
-            color: '#666',
-            font: {
-              size: 11
-            },
-            // 使用科学计数法显示大数值
-            callback: function(value) {
-              // 如果数值绝对值大于1000或小于0.001，使用科学计数法
-              if (Math.abs(value) >= 1000 || Math.abs(value) < 0.001) {
-                return value.toExponential(2);
-              }
-              // 否则使用普通格式，保留2位小数
-              return value.toFixed(2);
-            },
-            // 设置最大刻度数
-            maxTicksLimit: 8,
-            // 使用Chart.js内置的自动刻度算法
-            autoSkip: true,
-            autoSkipPadding: 10
-          }
-        }
-      },
-      interaction: {
-        mode: 'nearest',
-        axis: 'x',
-        intersect: false
-      },
-      animation: {
-        duration: 1000,
-        easing: 'easeInOutQuart'
-      }
-    }
-  })
-}
-
-
-
 // 监听窗口大小变化，调整图表大小
 const handleResize = () => {
   if (rewardChartInstance) {
@@ -596,12 +619,17 @@ const handleLogout = () => {
 watch(() => route.params.id, (newId) => {
   modelId.value = newId
   currentPage.value = 1
+  // 重新初始化图表
+  initRewardChart()
   fetchModelInfo()
   fetchTrainData()
 })
 
 // 组件挂载时
 onMounted(() => {
+  // 初始化图表
+  initRewardChart()
+  
   // 监听窗口大小变化
   window.addEventListener('resize', handleResize)
   
@@ -612,7 +640,7 @@ onMounted(() => {
 
 // 监听训练数据变化，自动更新图表
 watch(() => trainData.value, () => {
-  updateChart()
+  updateRewardChart()
 }, { deep: true })
 
 // 组件卸载时

@@ -41,7 +41,9 @@
                 :style="ue.style"
               >
                 <img src="../runtassets/UE.png" alt="用户设备" class="element-image">
-                <div class="element-label">UE {{ index + 1 }}</div>
+                <div class="offload-decision" :class="{ 'offload-mec': ue.offloadDecision === 1, 'local-execution': ue.offloadDecision === 0 }">
+                  {{ ue.offloadDecision === 1 ? '卸载' : ue.offloadDecision === 0 ? '本地' : '等待' }}
+                </div>
               </div>
             </div>
           </div>
@@ -478,7 +480,8 @@ const initializeUEElements = () => {
         left: `${x}px`,
         top: `${y}px`,
         zIndex: 2
-      }
+      },
+      offloadDecision: -1 // 初始状态为-1，表示等待
     })
   }
   
@@ -501,6 +504,20 @@ const updateVisualization = () => {
   const z = obs[uavPosIndex + 2]
   
   uavPosition.value = { x, y, z }
+  
+  // 解析当前步骤的action，获取卸载决策
+  if (currentStep.value < inferenceData.value.action.length) {
+    const action = inferenceData.value.action[currentStep.value]
+    const offloadDecision = action.slice(0, n_ue) // 获取卸载决策部分
+    
+    // 更新每个UE的卸载决策
+    ueElements.value.forEach((ue, index) => {
+      if (index < offloadDecision.length) {
+        // 根据阈值判断卸载决策：小于0.5为本地执行，大于等于0.5为卸载到MEC
+        ue.offloadDecision = offloadDecision[index] >= 0.5 ? 1 : 0
+      }
+    })
+  }
 }
 
 // 监听当前步骤变化，更新可视化
@@ -783,6 +800,31 @@ const handleLogout = () => {
   border-radius: 3px;
   border: 1px solid #dcdfe6;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* 卸载决策样式 */
+.offload-decision {
+  font-size: 0.7rem;
+  font-weight: bold;
+  padding: 2px 4px;
+  border-radius: 4px;
+  margin-top: 2px;
+  text-align: center;
+  color: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  min-width: 36px;
+}
+
+/* 卸载到MEC的样式 */
+.offload-decision.offload-mec {
+  background-color: #67c23a;
+  border: 1px solid #529b2e;
+}
+
+/* 本地执行的样式 */
+.offload-decision.local-execution {
+  background-color: #f56c6c;
+  border: 1px solid #e64980;
 }
 
 /* 元素类型特定样式 */
